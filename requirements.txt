@@ -1,4 +1,0 @@
-pyTelegramBotAPI
-pillow
-opencv-python-headless
-numpy
