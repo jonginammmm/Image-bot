@@ -1,5 +1,0 @@
-flask
-pyTelegramBotAPI
-opencv-python-headless
-pillow
-numpy
