@@ -1,5 +1,5 @@
-flask
-pyTelegramBotAPI
-opencv-python-headless
-numpy
-pillow
+torch
+torchvision
+diffusers
+transformers
+accelerate
