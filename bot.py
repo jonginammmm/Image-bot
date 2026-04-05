@@ -9,7 +9,7 @@ import time
 from datetime import datetime
 
 # ===== CONFIG =====
-TOKEN = os.getenv"8770225032:AAHeeR2vzqoqq3ZGJGiPScAotfNropL5314"
+TOKEN = os.getenv "8770225032:AAHeeR2vzqoqq3ZGJGiPScAotfNropL5314"
 ADMIN_ID = 6394219796 # o'zingni id qo'y
 
 bot = telebot.TeleBot(TOKEN)
