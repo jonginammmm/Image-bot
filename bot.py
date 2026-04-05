@@ -9,15 +9,15 @@ import time
 from datetime import datetime
 
 # ===== CONFIG =====
-TOKEN = os.getenv "8770225032:AAHeeR2vzqoqq3ZGJGiPScAotfNropL5314"
-ADMIN_ID = 6394219796 # o'zingni id qo'y
+TOKEN = os.getenv"8770225032:AAHeeR2vzqoqq3ZGJGiPScAotfNropL5314
+ADMIN_ID =  6394219796 # o'z telegram id'ingni yoz
 
 bot = telebot.TeleBot(TOKEN)
 
 # ===== KEEP ALIVE =====
-app = Flask('')
+app = Flask(__name__)
 
-@app.route('/')
+@app.route('/'")
 def home():
     return "Alive"
 
@@ -43,12 +43,12 @@ CREATE TABLE IF NOT EXISTS users(
 """)
 conn.commit()
 
-LIMIT = 6
+LIMIT = 5
 
 # ===== MENU =====
 def menu(uid):
     kb = types.InlineKeyboardMarkup()
-    kb.add(types.InlineKeyboardButton("📸 Rasm yuborish", callback_data="send"))
+    kb.add(types.InlineKeyboardButton("📸 Rasm jonatish", callback_data="send"))
     kb.add(types.InlineKeyboardButton("⚙️ Sozlamalar", callback_data="settings"))
     if uid == ADMIN_ID:
         kb.add(types.InlineKeyboardButton("👑 Admin panel", callback_data="admin"))
@@ -68,8 +68,10 @@ def start(m):
                    (uid, datetime.now().strftime("%Y-%m-%d")))
     conn.commit()
 
-    bot.send_message(uid,"🤖 AI IMAGE BOTga xush kebsiz☺️💋\n📸 Marhamat Rasm yuboring🗿",
-                     reply_markup=menu(uid))
+    bot.send_message(uid,
+        "🤖 AI IMAGE BOTga xushkebsz\n\n📸 Marhamat Rasm jonating",
+        reply_markup=menu(uid)
+    )
 
 # ===== LIMIT =====
 def check_limit(uid):
@@ -77,10 +79,10 @@ def check_limit(uid):
         return True
 
     today = datetime.now().strftime("%Y-%m-%d")
-    data = cursor.execute("SELECT count,last_date FROM users WHERE id=?",(uid,)).fetchone()
+    data = cursor.execute("SELECT count,last_date FROM users WHERE id=?", (uid,)).fetchone()
 
     if data[1] != today:
-        cursor.execute("UPDATE users SET count=0,last_date=? WHERE id=?",(today,uid))
+        cursor.execute("UPDATE users SET count=0,last_date=? WHERE id=?", (today, uid))
         conn.commit()
         return True
 
@@ -90,7 +92,7 @@ def check_limit(uid):
     return True
 
 def add_count(uid):
-    cursor.execute("UPDATE users SET count=count+1 WHERE id=?",(uid,))
+    cursor.execute("UPDATE users SET count=count+1 WHERE id=?", (uid,))
     conn.commit()
 
 # ===== CALLBACK =====
@@ -98,62 +100,62 @@ def add_count(uid):
 def call(c):
     uid = c.from_user.id
 
-    banned = cursor.execute("SELECT banned FROM users WHERE id=?",(uid,)).fetchone()[0]
+    banned = cursor.execute("SELECT banned FROM users WHERE id=?", (uid,)).fetchone()[0]
     if banned:
-        bot.answer_callback_query(c.id,"🚫 Siz bloklangansiz")
+        bot.answer_callback_query(c.id, "🚫 Siz bloklangansiz")
         return
 
     if c.data == "back":
-        bot.edit_message_text("🏠 Menu",c.message.chat.id,c.message.message_id,
+        bot.edit_message_text("🏠 Menu", c.message.chat.id, c.message.message_id,
                               reply_markup=menu(uid))
 
     elif c.data == "send":
-        bot.edit_message_text("📸 Rasm yuboring",c.message.chat.id,c.message.message_id,
+        bot.edit_message_text("📸 Rasm jonating", c.message.chat.id, c.message.message_id,
                               reply_markup=back())
 
     elif c.data == "settings":
-        wm = cursor.execute("SELECT watermark FROM users WHERE id=?",(uid,)).fetchone()[0]
+        wm = cursor.execute("SELECT watermark FROM users WHERE id=?", (uid,)).fetchone()[0]
         status = "ON" if wm else "OFF"
 
         kb = types.InlineKeyboardMarkup()
-        kb.add(types.InlineKeyboardButton(f"💧 Watermark: {status}",callback_data="wm"))
-        kb.add(types.InlineKeyboardButton("🔙 Orqaga",callback_data="back"))
+        kb.add(types.InlineKeyboardButton(f"💧 Watermark: {status}", callback_data="wm"))
+        kb.add(types.InlineKeyboardButton("🔙 Orqaga", callback_data="back"))
 
-        bot.edit_message_text("⚙️ Sozlamalar",c.message.chat.id,c.message.message_id,
+        bot.edit_message_text("⚙️ Sozlamalar", c.message.chat.id, c.message.message_id,
                               reply_markup=kb)
 
     elif c.data == "wm":
-        wm = cursor.execute("SELECT watermark FROM users WHERE id=?",(uid,)).fetchone()[0]
-        cursor.execute("UPDATE users SET watermark=? WHERE id=?",(0 if wm else 1,uid))
+        wm = cursor.execute("SELECT watermark FROM users WHERE id=?", (uid,)).fetchone()[0]
+        cursor.execute("UPDATE users SET watermark=? WHERE id=?", (0 if wm else 1, uid))
         conn.commit()
-        bot.answer_callback_query(c.id,"✅ O‘zgardi")
+        bot.answer_callback_query(c.id, "✅ O‘zgardi")
 
-    # ADMIN
+    # ===== ADMIN =====
     elif c.data == "admin" and uid == ADMIN_ID:
         kb = types.InlineKeyboardMarkup()
-        kb.add(types.InlineKeyboardButton("📊 Stat",callback_data="stat"))
-        kb.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="broadcast"))
-        kb.add(types.InlineKeyboardButton("🚫 Ban",callback_data="ban"))
-        kb.add(types.InlineKeyboardButton("✅ Unban",callback_data="unban"))
-        kb.add(types.InlineKeyboardButton("🔙 Orqaga",callback_data="back"))
+        kb.add(types.InlineKeyboardButton("📊 Statistika", callback_data="stat"))
+        kb.add(types.InlineKeyboardButton("📢 Broadcast", callback_data="broadcast"))
+        kb.add(types.InlineKeyboardButton("🚫 Ban", callback_data="ban"))
+        kb.add(types.InlineKeyboardButton("✅ Unban", callback_data="unban"))
+        kb.add(types.InlineKeyboardButton("🔙 Orqaga", callback_data="back"))
 
-        bot.edit_message_text("👑 Admin panel",c.message.chat.id,c.message.message_id,
+        bot.edit_message_text("👑 Admin panel", c.message.chat.id, c.message.message_id,
                               reply_markup=kb)
 
     elif c.data == "stat" and uid == ADMIN_ID:
         users = cursor.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-        bot.send_message(uid,f"👥 Users: {users}")
+        bot.send_message(uid, f"👥 Users: {users}")
 
     elif c.data == "broadcast" and uid == ADMIN_ID:
-        msg = bot.send_message(uid,"✍️ Xabar yuboring")
+        msg = bot.send_message(uid, "✍️ CoMETA botizga Xabar yuboring")
         bot.register_next_step_handler(msg, send_broadcast)
 
     elif c.data == "ban" and uid == ADMIN_ID:
-        msg = bot.send_message(uid,"🚫 ID yubor")
+        msg = bot.send_message(uid, "🚫 ID yubor")
         bot.register_next_step_handler(msg, do_ban)
 
     elif c.data == "unban" and uid == ADMIN_ID:
-        msg = bot.send_message(uid,"✅ ID yubor")
+        msg = bot.send_message(uid, "✅ ID yubor")
         bot.register_next_step_handler(msg, do_unban)
 
 # ===== ADMIN FUNCTIONS =====
@@ -161,71 +163,41 @@ def send_broadcast(m):
     users = cursor.execute("SELECT id FROM users").fetchall()
     for u in users:
         try:
-            bot.send_message(u[0],m.text)
+            bot.send_message(u[0], m.text)
         except:
             pass
 
 def do_ban(m):
-    cursor.execute("UPDATE users SET banned=1 WHERE id=?",(int(m.text),))
+    cursor.execute("UPDATE users SET banned=1 WHERE id=?", (int(m.text),))
     conn.commit()
-    bot.send_message(m.chat.id,"🚫 Ban qilindi")
+    bot.send_message(m.chat.id, "🚫 Ban qilindiz")
 
 def do_unban(m):
-    cursor.execute("UPDATE users SET banned=0 WHERE id=?",(int(m.text),))
+    cursor.execute("UPDATE users SET banned=0 WHERE id=?", (int(m.text),))
     conn.commit()
-    bot.send_message(m.chat.id,"✅ Unban qilindi")
+    bot.send_message(m.chat.id, "✅ Unban qilindingiz")
 
-# ===== AI PHOTO =====
+# ===== PHOTO =====
 @bot.message_handler(content_types=['photo'])
 def photo(m):
     uid = m.from_user.id
 
     if not check_limit(uid):
-        bot.send_message(uid,"🚫 Bugungi limit tugadi")
+        bot.send_message(uid, "🚫 Limitiz tugadi")
         return
 
-    msg = bot.send_message(uid,"⏳ AI ishlayapti...")
+    msg = bot.send_message(uid, "⏳ Ishlayapti...")
 
     file = bot.get_file(m.photo[-1].file_id)
     file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file.file_path}"
 
-    headers = {
-        "Authorization": f"Token {os.getenv('REPLICATE_API')}",
-        "Content-Type": "application/json"
-    }
-
-    data = {
-        "version": "db21e45d1c5f3c...",  # model
-        "input": {
-            "image": file_url,
-            "prompt": "remove red lines, clean image, enhance text"
-        }
-    }
-
-    response = requests.post(
-        "https://api.replicate.com/v1/predictions",
-        json=data,
-        headers=headers
-    )
-
-    prediction = response.json()
-
-    while prediction["status"] != "succeeded":
-        time.sleep(2)
-        response = requests.get(
-            f"https://api.replicate.com/v1/predictions/{prediction['id']}",
-            headers=headers
-        )
-        prediction = response.json()
-
-    result_url = prediction["output"][0]
-
-    bot.send_photo(uid, result_url, caption="✨ AI natija")
-    bot.edit_message_text("✅ Tayyor", uid, msg.message_id)
+    # vaqtinchalik AI o‘rniga qaytaradi (test uchun)
+    bot.send_photo(uid, file_url, caption="✅ Tayyor")
+    bot.delete_message(uid, msg.message_id)
 
     add_count(uid)
 
 # ===== RUN =====
-print("🔥 BOT ISHLADI")
+print("🔥 CoMETA 4KRasm BOTiz ISHLADI marhamat foydalanishiz mumkin")
 keep_alive()
 bot.infinity_polling()
