@@ -2,6 +2,19 @@ import telebot
 from flask import Flask
 import threading
 from telebot import types
+import sqlite3
+import os
+import requests
+import time
+from datetime import datetime
+
+# ===== CONFIG =====
+TOKEN = os.getenv"8770225032:AAHeeR2vzqoqq3ZGJGiPScAotfNropL5314"
+ADMIN_ID = 6394219796 # o'zingni id qo'y
+
+bot = telebot.TeleBot(TOKEN)
+
+# ===== KEEP ALIVE =====
 app = Flask('')
 
 @app.route('/')
@@ -14,16 +27,6 @@ def run():
 def keep_alive():
     t = threading.Thread(target=run)
     t.start()
-import sqlite3
-import os
-import cv2
-from datetime import datetime
-import time
-
-TOKEN = "8770225032:AAHkrpbuD0Ga88YWmjK9dzOSEzrDm2EBY_Y"
-ADMIN_ID = 6394219796
-
-bot = telebot.TeleBot(TOKEN)
 
 # ===== DB =====
 conn = sqlite3.connect("db.db", check_same_thread=False)
@@ -41,7 +44,6 @@ CREATE TABLE IF NOT EXISTS users(
 conn.commit()
 
 LIMIT = 6
-user_data = {}
 
 # ===== MENU =====
 def menu(uid):
@@ -66,7 +68,7 @@ def start(m):
                    (uid, datetime.now().strftime("%Y-%m-%d")))
     conn.commit()
 
-    bot.send_message(uid,"🤖 AI IMAGE BOTga xushkebsz\n📸 Marhamat Rasm yuboring",
+    bot.send_message(uid,"🤖 AI IMAGE BOTga xush kebsiz☺️💋\n📸 Marhamat Rasm yuboring🗿",
                      reply_markup=menu(uid))
 
 # ===== LIMIT =====
@@ -96,7 +98,6 @@ def add_count(uid):
 def call(c):
     uid = c.from_user.id
 
-    # BAN CHECK
     banned = cursor.execute("SELECT banned FROM users WHERE id=?",(uid,)).fetchone()[0]
     if banned:
         bot.answer_callback_query(c.id,"🚫 Siz bloklangansiz")
@@ -127,7 +128,7 @@ def call(c):
         conn.commit()
         bot.answer_callback_query(c.id,"✅ O‘zgardi")
 
-    # ===== ADMIN PANEL =====
+    # ADMIN
     elif c.data == "admin" and uid == ADMIN_ID:
         kb = types.InlineKeyboardMarkup()
         kb.add(types.InlineKeyboardButton("📊 Stat",callback_data="stat"))
@@ -136,7 +137,7 @@ def call(c):
         kb.add(types.InlineKeyboardButton("✅ Unban",callback_data="unban"))
         kb.add(types.InlineKeyboardButton("🔙 Orqaga",callback_data="back"))
 
-        bot.edit_message_text("👑CoMETA Admin paneli",c.message.chat.id,c.message.message_id,
+        bot.edit_message_text("👑 Admin panel",c.message.chat.id,c.message.message_id,
                               reply_markup=kb)
 
     elif c.data == "stat" and uid == ADMIN_ID:
@@ -174,52 +175,57 @@ def do_unban(m):
     conn.commit()
     bot.send_message(m.chat.id,"✅ Unban qilindi")
 
-# ===== PHOTO =====
+# ===== AI PHOTO =====
 @bot.message_handler(content_types=['photo'])
 def photo(m):
     uid = m.from_user.id
 
     if not check_limit(uid):
-        bot.send_message(uid,"🚫Bugingi Limit tugadi")
+        bot.send_message(uid,"🚫 Bugungi limit tugadi")
         return
 
-    msg = bot.send_message(uid,"⏳ 10%")
+    msg = bot.send_message(uid,"⏳ AI ishlayapti...")
 
     file = bot.get_file(m.photo[-1].file_id)
-    data = bot.download_file(file.file_path)
+    file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file.file_path}"
 
-    path = f"{uid}.jpg"
-    open(path,"wb").write(data)
+    headers = {
+        "Authorization": f"Token {os.getenv('REPLICATE_API')}",
+        "Content-Type": "application/json"
+    }
 
-    bot.edit_message_text("⏳ 30%",uid,msg.message_id)
-    time.sleep(1)
+    data = {
+        "version": "db21e45d1c5f3c...",  # model
+        "input": {
+            "image": file_url,
+            "prompt": "remove red lines, clean image, enhance text"
+        }
+    }
 
-    img = cv2.imread(path)
-    h,w = img.shape[:2]
+    response = requests.post(
+        "https://api.replicate.com/v1/predictions",
+        json=data,
+        headers=headers
+    )
 
-    scale = 4 if w < 500 else 2
-    img = cv2.resize(img,(w*scale,h*scale),interpolation=cv2.INTER_CUBIC)
+    prediction = response.json()
 
-    bot.edit_message_text("⏳ 60%",uid,msg.message_id)
-    time.sleep(1)
+    while prediction["status"] != "succeeded":
+        time.sleep(2)
+        response = requests.get(
+            f"https://api.replicate.com/v1/predictions/{prediction['id']}",
+            headers=headers
+        )
+        prediction = response.json()
 
-    out = f"hd_{uid}.jpg"
-    cv2.imwrite(out,img)
+    result_url = prediction["output"][0]
 
-    bot.edit_message_text("⏳ 90%",uid,msg.message_id)
-    time.sleep(1)
-
-    bot.send_photo(uid,open(path,"rb"),caption="📷 Original")
-    bot.send_photo(uid,open(out,"rb"),caption="✨ HD")
-
-    bot.edit_message_text("✅ Tayyor 100%",uid,msg.message_id)
+    bot.send_photo(uid, result_url, caption="✨ AI natija")
+    bot.edit_message_text("✅ Tayyor", uid, msg.message_id)
 
     add_count(uid)
 
-    os.remove(path)
-    os.remove(out)
-
 # ===== RUN =====
-print("CoMETA SIZ yaratgan Bot ishga tushdi 🔥")
+print("🔥 BOT ISHLADI")
 keep_alive()
 bot.infinity_polling()
