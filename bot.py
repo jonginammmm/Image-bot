@@ -1,32 +1,13 @@
 import telebot
-from flask import Flask
-import threading
 from telebot import types
 import sqlite3
-import os
-import requests
-import time
-from datetime import datetime
+from datetime import datetime, timedelta
+import random
 
-# ===== CONFIG =====
 TOKEN = "8770225032:AAHeeR2vzqoqq3ZGJGiPScAotfNropL5314"
-ADMIN_ID = 6394219796 # o'z telegram id'ingni yoz
+ADMIN_ID = 6394219796
 
 bot = telebot.TeleBot(TOKEN)
-
-# ===== KEEP ALIVE =====
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Alive"
-
-def run():
-    app.run(host='0.0.0.0', port=10000)
-
-def keep_alive():
-    t = threading.Thread(target=run)
-    t.start()
 
 # ===== DB =====
 conn = sqlite3.connect("db.db", check_same_thread=False)
@@ -35,169 +16,200 @@ cursor = conn.cursor()
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS users(
     id INTEGER PRIMARY KEY,
-    count INT DEFAULT 0,
-    last_date TEXT,
-    watermark INT DEFAULT 1,
-    banned INT DEFAULT 0
+    phone TEXT,
+    joined TEXT,
+    photos INT DEFAULT 0,
+    processed INT DEFAULT 0,
+    banned_until TEXT
 )
 """)
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS logs(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INT,
+    action TEXT,
+    time TEXT
+)
+""")
+
 conn.commit()
 
-LIMIT = 5
+# ===== LOG =====
+def log(uid, action):
+    cursor.execute("INSERT INTO logs(user_id, action, time) VALUES(?,?,?)",
+                   (uid, action, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    conn.commit()
 
-# ===== MENU =====
-def menu(uid):
-    kb = types.InlineKeyboardMarkup()
-    kb.add(types.InlineKeyboardButton("📸 Rasm jonatish", callback_data="send"))
-    kb.add(types.InlineKeyboardButton("⚙️ Sozlamalar", callback_data="settings"))
-    if uid == ADMIN_ID:
-        kb.add(types.InlineKeyboardButton("👑 Admin panel", callback_data="admin"))
-    return kb
+# ===== BAN =====
+def is_banned(user):
+    if user and user[5]:
+        until = datetime.strptime(user[5], "%Y-%m-%d %H:%M:%S")
+        if datetime.now() < until:
+            return True, until
+    return False, None
 
-def back():
-    kb = types.InlineKeyboardMarkup()
-    kb.add(types.InlineKeyboardButton("🔙 Orqaga", callback_data="back"))
-    return kb
+def ban_user(uid, minutes):
+    until = datetime.now() + timedelta(minutes=minutes)
+    cursor.execute("UPDATE users SET banned_until=? WHERE id=?",
+                   (until.strftime("%Y-%m-%d %H:%M:%S"), uid))
+    conn.commit()
 
 # ===== START =====
 @bot.message_handler(commands=['start'])
 def start(m):
     uid = m.from_user.id
+    user = cursor.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
 
-    cursor.execute("INSERT OR IGNORE INTO users(id,last_date) VALUES(?,?)",
-                   (uid, datetime.now().strftime("%Y-%m-%d")))
+    if not user:
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        kb.add(types.KeyboardButton("📱 Telefon yuborish", request_contact=True))
+        bot.send_message(uid, "📱 Telefon yuboring", reply_markup=kb)
+    else:
+        menu(uid)
+
+# ===== CONTACT =====
+@bot.message_handler(content_types=['contact'])
+def contact(m):
+    uid = m.from_user.id
+    phone = m.contact.phone_number
+
+    cursor.execute("INSERT OR REPLACE INTO users(id, phone, joined) VALUES(?,?,?)",
+                   (uid, phone, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     conn.commit()
 
-    bot.send_message(uid,
-        "🤖 AI IMAGE BOTga xushkebsz\n\n📸 Marhamat Rasm jonating",
-        reply_markup=menu(uid)
-    )
+    log(uid, "register")
 
-# ===== LIMIT =====
-def check_limit(uid):
+    bot.send_message(uid, "✅ Tabrikliman Ro‘yxatdan o‘tdingiz", reply_markup=types.ReplyKeyboardRemove())
+    menu(uid)
+
+# ===== MENU =====
+def menu(uid):
+    kb = types.InlineKeyboardMarkup()
+    kb.add(types.InlineKeyboardButton("📸 Rasm yuborish", callback_data="send"))
+    kb.add(types.InlineKeyboardButton("👤 Profil", callback_data="profile"))
+
     if uid == ADMIN_ID:
-        return True
+        kb.add(types.InlineKeyboardButton("👑 Admin", callback_data="admin"))
 
-    today = datetime.now().strftime("%Y-%m-%d")
-    data = cursor.execute("SELECT count,last_date FROM users WHERE id=?", (uid,)).fetchone()
-
-    if data[1] != today:
-        cursor.execute("UPDATE users SET count=0,last_date=? WHERE id=?", (today, uid))
-        conn.commit()
-        return True
-
-    if data[0] >= LIMIT:
-        return False
-
-    return True
-
-def add_count(uid):
-    cursor.execute("UPDATE users SET count=count+1 WHERE id=?", (uid,))
-    conn.commit()
+    bot.send_message(uid, "🏠Bosh Menyu", reply_markup=kb)
 
 # ===== CALLBACK =====
 @bot.callback_query_handler(func=lambda c: True)
 def call(c):
     uid = c.from_user.id
+    user = cursor.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
 
-    banned = cursor.execute("SELECT banned FROM users WHERE id=?", (uid,)).fetchone()[0]
+    banned, until = is_banned(user)
     if banned:
-        bot.answer_callback_query(c.id, "🚫 Siz bloklangansiz")
+        bot.send_message(uid, f"⛔ Siz {until} gacha ban yediz")
         return
 
-    if c.data == "back":
-        bot.edit_message_text("🏠 Menu", c.message.chat.id, c.message.message_id,
-                              reply_markup=menu(uid))
+    if c.data == "send":
+        bot.send_message(uid, "📸 Rasm jonating")
 
-    elif c.data == "send":
-        bot.edit_message_text("📸 Rasm jonating", c.message.chat.id, c.message.message_id,
-                              reply_markup=back())
+    elif c.data == "profile":
+        bot.send_message(uid, f"""
+👤 Profil
 
-    elif c.data == "settings":
-        wm = cursor.execute("SELECT watermark FROM users WHERE id=?", (uid,)).fetchone()[0]
-        status = "ON" if wm else "OFF"
+📱 {user[1]}
+📸 {user[3]} ta rasm
+✨ {user[4]} ta ishlangan
+        """)
 
-        kb = types.InlineKeyboardMarkup()
-        kb.add(types.InlineKeyboardButton(f"💧 Watermark: {status}", callback_data="wm"))
-        kb.add(types.InlineKeyboardButton("🔙 Orqaga", callback_data="back"))
-
-        bot.edit_message_text("⚙️ Sozlamalar", c.message.chat.id, c.message.message_id,
-                              reply_markup=kb)
-
-    elif c.data == "wm":
-        wm = cursor.execute("SELECT watermark FROM users WHERE id=?", (uid,)).fetchone()[0]
-        cursor.execute("UPDATE users SET watermark=? WHERE id=?", (0 if wm else 1, uid))
-        conn.commit()
-        bot.answer_callback_query(c.id, "✅ O‘zgardi")
-
-    # ===== ADMIN =====
     elif c.data == "admin" and uid == ADMIN_ID:
         kb = types.InlineKeyboardMarkup()
         kb.add(types.InlineKeyboardButton("📊 Statistika", callback_data="stat"))
-        kb.add(types.InlineKeyboardButton("📢 Broadcast", callback_data="broadcast"))
-        kb.add(types.InlineKeyboardButton("🚫 Ban", callback_data="ban"))
-        kb.add(types.InlineKeyboardButton("✅ Unban", callback_data="unban"))
-        kb.add(types.InlineKeyboardButton("🔙 Orqaga", callback_data="back"))
+        kb.add(types.InlineKeyboardButton("🔍 User qidirish", callback_data="find"))
+        kb.add(types.InlineKeyboardButton("📢 Broadcast", callback_data="bc"))
+        bot.send_message(uid, "👑 Admin panel", reply_markup=kb)
 
-        bot.edit_message_text("👑 Admin panel", c.message.chat.id, c.message.message_id,
-                              reply_markup=kb)
-
-    elif c.data == "stat" and uid == ADMIN_ID:
+    elif c.data == "stat":
         users = cursor.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-        bot.send_message(uid, f"👥 Users: {users}")
+        photos = cursor.execute("SELECT SUM(photos) FROM users").fetchone()[0]
+        bot.send_message(uid, f"👥 {users}\n📸 {photos}")
 
-    elif c.data == "broadcast" and uid == ADMIN_ID:
-        msg = bot.send_message(uid, "✍️ CoMETA botizga Xabar yuboring")
-        bot.register_next_step_handler(msg, send_broadcast)
+    elif c.data == "find":
+        msg = bot.send_message(uid, "Kimni qidirmoqchisiz IDsini yuboring Topib beraman😁:")
+        bot.register_next_step_handler(msg, find_user)
 
-    elif c.data == "ban" and uid == ADMIN_ID:
-        msg = bot.send_message(uid, "🚫 ID yubor")
-        bot.register_next_step_handler(msg, do_ban)
+    elif c.data == "bc":
+        msg = bot.send_message(uid, "Marahat CoMETA Xabarizni yuboring:")
+        bot.register_next_step_handler(msg, broadcast)
 
-    elif c.data == "unban" and uid == ADMIN_ID:
-        msg = bot.send_message(uid, "✅ ID yubor")
-        bot.register_next_step_handler(msg, do_unban)
+    elif c.data.startswith("hd"):
+        cursor.execute("UPDATE users SET processed=processed+1 WHERE id=?", (uid,))
+        conn.commit()
+        bot.send_message(uid, "✨ Rasm HD qilindi (demo)")
 
-# ===== ADMIN FUNCTIONS =====
-def send_broadcast(m):
+    elif c.data.startswith("blur"):
+        cursor.execute("UPDATE users SET processed=processed+1 WHERE id=?", (uid,))
+        conn.commit()
+        bot.send_message(uid, "🌫 Rasm xiralashtirildi (demo)")
+
+    elif c.data == "back":
+        menu(uid)
+
+# ===== FIND USER =====
+def find_user(m):
+    try:
+        uid = int(m.text)
+        user = cursor.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+
+        if user:
+            bot.send_message(m.chat.id, f"""
+ID: {user[0]}
+📱 {user[1]}
+📸 {user[3]}
+✨ {user[4]}
+            """)
+    except:
+        bot.send_message(m.chat.id, "Xato")
+
+# ===== BROADCAST =====
+def broadcast(m):
     users = cursor.execute("SELECT id FROM users").fetchall()
+
     for u in users:
         try:
             bot.send_message(u[0], m.text)
         except:
             pass
 
-def do_ban(m):
-    cursor.execute("UPDATE users SET banned=1 WHERE id=?", (int(m.text),))
-    conn.commit()
-    bot.send_message(m.chat.id, "🚫 Ban qilindiz")
-
-def do_unban(m):
-    cursor.execute("UPDATE users SET banned=0 WHERE id=?", (int(m.text),))
-    conn.commit()
-    bot.send_message(m.chat.id, "✅ Unban qilindingiz")
+    bot.send_message(m.chat.id, "Yuborildi")
 
 # ===== PHOTO =====
 @bot.message_handler(content_types=['photo'])
 def photo(m):
     uid = m.from_user.id
+    user = cursor.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
 
-    if not check_limit(uid):
-        bot.send_message(uid, "🚫 Limitiz tugadi")
+    banned, until = is_banned(user)
+    if banned:
+        bot.send_message(uid, f"⛔ Ban: {until}")
         return
 
-    msg = bot.send_message(uid, "⏳ Ishlayapti...")
+    cursor.execute("UPDATE users SET photos=photos+1 WHERE id=?", (uid,))
+    conn.commit()
 
-    file = bot.get_file(m.photo[-1].file_id)
-    file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file.file_path}"
+    log(uid, "photo_send")
 
-    # vaqtinchalik AI o‘rniga qaytaradi (test uchun)
-    bot.send_photo(uid, file_url, caption="✅ Tayyor")
-    bot.delete_message(uid, msg.message_id)
+    # ===== FAKE NSFW CHECK =====
+    if random.randint(1,10) == 1:
+        ban_user(uid, 60)
+        bot.send_message(uid, "🚫 Afsus Siz 1 soatga ban oldiz")
+        return
 
-    add_count(uid)
+    kb = types.InlineKeyboardMarkup()
+    kb.add(types.InlineKeyboardButton("720p", callback_data="hd_720"))
+    kb.add(types.InlineKeyboardButton("1080p", callback_data="hd_1080"))
+    kb.add(types.InlineKeyboardButton("Full HD", callback_data="hd_Full HD"))
+    kb.add(types.InlineKeyboardButton("Blur 144p", callback_data="blur_144"))
+    kb.add(types.InlineKeyboardButton("Blur 240p", callback_data="blur_240"))
+    kb.add(types.InlineKeyboardButton("🔙 Ortga", callback_data="back"))
+
+    bot.send_message(uid, "✅Marhatat Tanlang", reply_markup=kb)
 
 # ===== RUN =====
-print("🔥 CoMETA 4KRasm BOTiz ISHLADI marhamat foydalanishiz mumkin")
-keep_alive()
+print("🔥 CoMETA BOTIZ ISHLADI❤️❤️❤️")
 bot.infinity_polling()
