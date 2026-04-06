@@ -4,7 +4,7 @@ import sqlite3
 from datetime import datetime, timedelta
 import random
 
-TOKEN = "8770225032:AAHeeR2vzqoqq3ZGJGiPScAotfNropL5314"
+TOKEN = "8770225032:AAHGtOVcJOuyMOGihCgm0Ml1AuEeNUm9PO8"
 ADMIN_ID = 6394219796
 
 bot = telebot.TeleBot(TOKEN)
